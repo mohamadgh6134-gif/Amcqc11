@@ -1,0 +1,1779 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>سامانه کنترل کیفیت و مجوز شروع به کار خط | آرمان موتور</title>
+    <!-- فونت فارسی وزیرمتن -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Chart.js برای نمودار پارتو -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- SheetJS برای خروجی اکسل واقعی -->
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Vazirmatn', 'sans-serif'],
+                    },
+                    colors: {
+                        navy: {
+                            800: '#1e293b',
+                            900: '#0f172a',
+                            950: '#090d16',
+                        },
+                        industrial: {
+                            blue: '#1d4ed8',
+                            slate: '#334155',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body {
+            font-family: 'Vazirmatn', sans-serif;
+            background-color: #f1f5f9;
+        }
+        /* سفارشی‌سازی اسکرول‌بار */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #e2e8f0;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #94a3b8;
+            border-radius: 3px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #64748b;
+        }
+        .fade-in {
+            animation: fadeIn 0.25s ease-in-out;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(4px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+    </style>
+</head>
+<body class="text-slate-800 antialiased selection:bg-blue-600 selection:text-white">
+
+    <!-- سیستم اعلان سفارشی (Toast Notification) بدون استفاده از alert -->
+    <div id="toast-container" class="fixed bottom-4 left-4 z-50 flex flex-col gap-2 max-w-sm w-full pointer-events-none"></div>
+
+    <!-- مودال تاییدیه سفارشی (Custom Confirm Modal) بدون استفاده از confirm -->
+    <div id="confirm-modal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 hidden items-center justify-center p-4">
+        <div class="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 border border-slate-200 fade-in">
+            <div class="flex items-center gap-3 text-amber-600 mb-3">
+                <div class="p-2 bg-amber-100 rounded-xl">
+                    <i data-lucide="alert-triangle" class="w-6 h-6"></i>
+                </div>
+                <h3 id="confirm-title" class="text-lg font-bold text-slate-900">تایید عملیات</h3>
+            </div>
+            <p id="confirm-message" class="text-slate-600 text-sm leading-relaxed mb-6">آیا از انجام این عملیات اطمینان دارید؟</p>
+            <div class="flex items-center justify-end gap-3">
+                <button id="confirm-cancel-btn" class="px-4 py-2.5 rounded-xl text-sm font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 transition">انصراف</button>
+                <button id="confirm-ok-btn" class="px-4 py-2.5 rounded-xl text-sm font-medium text-white bg-red-600 hover:bg-red-700 transition shadow-sm">بله، انجام شود</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================== صفحه ورود (LOGIN VIEW) ==================== -->
+    <div id="login-view" class="min-h-screen flex flex-col justify-center items-center p-4 bg-gradient-to-br from-slate-900 via-navy-900 to-slate-800">
+        <div class="max-w-md w-full bg-white rounded-3xl shadow-2xl overflow-hidden border border-slate-700/20 fade-in">
+            <!-- هدر کارت ورود -->
+            <div class="bg-navy-900 px-6 py-8 text-center relative overflow-hidden">
+                <div class="absolute inset-0 opacity-10 bg-[radial-gradient(#3b82f6_1px,transparent_1px)] [background-size:16px_16px]"></div>
+                <div class="relative z-10 flex flex-col items-center">
+                    <div class="w-16 h-16 bg-blue-600 rounded-2xl flex items-center justify-center shadow-lg shadow-blue-600/30 mb-4 border border-blue-400/30">
+                        <i data-lucide="shield-check" class="w-9 h-9 text-white"></i>
+                    </div>
+                    <h1 class="text-2xl font-extrabold text-white tracking-tight">شرکت آرمان موتور</h1>
+                    <p class="text-blue-200 text-sm mt-1 font-medium">سامانه دیجیتال کنترل کیفیت و مجوز شروع خط (QC & Line Clearance)</p>
+                </div>
+            </div>
+
+            <!-- فرم ورود -->
+            <div class="p-6 sm:p-8">
+                <form id="login-form" class="space-y-4">
+                    <div>
+                        <label class="block text-xs font-bold text-slate-700 mb-1.5">نام کاربری یا کد پرسنلی</label>
+                        <div class="relative">
+                            <input type="text" id="login-username" required placeholder="مثال: admin یا 1042"
+                                class="w-full pl-4 pr-10 py-3 bg-slate-50 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-blue-600 focus:border-blue-600 outline-none transition">
+                            <i data-lucide="user" class="w-4 h-4 text-slate-400 absolute right-3.5 top-3.5"></i>
+                        </div>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-700 mb-1.5">رمز عبور</label>
+                        <div class="relative">
+                            <input type="password" id="login-password" required placeholder="••••"
+                                class="w-full pl-4 pr-10 py-3 bg-slate-50 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-blue-600 focus:border-blue-600 outline-none transition">
+                            <i data-lucide="lock" class="w-4 h-4 text-slate-400 absolute right-3.5 top-3.5"></i>
+                        </div>
+                    </div>
+                    <button type="submit" class="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl shadow-md shadow-blue-600/20 transition flex items-center justify-center gap-2">
+                        <span>ورود به سامانه</span>
+                        <i data-lucide="arrow-left" class="w-4 h-4"></i>
+                    </button>
+                </form>
+
+                <!-- ورود سریع دمو برای تست سطوح دسترسی -->
+                <div class="mt-7 pt-6 border-t border-slate-200">
+                    <div class="flex items-center justify-between mb-3">
+                        <span class="text-xs font-bold text-slate-500">ورود سریع دمو (تست سطوح دسترسی):</span>
+                        <span class="text-[11px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded-md font-medium">رمز همه: 1234</span>
+                    </div>
+                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                        <button type="button" onclick="quickLogin('admin')"
+                            class="flex flex-col items-center p-2.5 rounded-xl border-2 border-purple-200 bg-purple-50/70 hover:bg-purple-100 hover:border-purple-400 transition group">
+                            <i data-lucide="settings" class="w-5 h-5 text-purple-700 mb-1 group-hover:rotate-45 transition-transform"></i>
+                            <span class="text-xs font-bold text-purple-900">مدیر سیستم (Admin)</span>
+                            <span class="text-[10px] text-purple-600 mt-0.5">دسترسی کامل + کاربران</span>
+                        </button>
+                        <button type="button" onclick="quickLogin('specialist')"
+                            class="flex flex-col items-center p-2.5 rounded-xl border-2 border-blue-200 bg-blue-50/70 hover:bg-blue-100 hover:border-blue-400 transition">
+                            <i data-lucide="bar-chart-3" class="w-5 h-5 text-blue-700 mb-1"></i>
+                            <span class="text-xs font-bold text-blue-900">کارشناس کیفیت</span>
+                            <span class="text-[10px] text-blue-600 mt-0.5">پارتو + تایید مجوز</span>
+                        </button>
+                        <button type="button" onclick="quickLogin('inspector')"
+                            class="flex flex-col items-center p-2.5 rounded-xl border-2 border-emerald-200 bg-emerald-50/70 hover:bg-emerald-100 hover:border-emerald-400 transition">
+                            <i data-lucide="clipboard-check" class="w-5 h-5 text-emerald-700 mb-1"></i>
+                            <span class="text-xs font-bold text-emerald-900">بازرس خط</span>
+                            <span class="text-[10px] text-emerald-600 mt-0.5">ثبت بازرسی و شروع کار</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <p class="text-slate-400 text-xs mt-6">واحد تضمین و کنترل کیفیت شرکت آرمان موتور • نسخه ۴.۲ سازمانی</p>
+    </div>
+
+    <!-- ==================== محیط اصلی سامانه (APP SHELL) ==================== -->
+    <div id="app-view" class="hidden min-h-screen flex flex-col">
+        <!-- نوار بالای صفحه (Header) -->
+        <header class="bg-navy-900 text-white shadow-lg sticky top-0 z-30 border-b border-slate-800">
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-4">
+                <!-- لوگو و عنوان -->
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center shadow-inner shrink-0">
+                        <i data-lucide="cog" class="w-6 h-6 text-white"></i>
+                    </div>
+                    <div>
+                        <div class="flex items-center gap-2">
+                            <span class="font-extrabold text-base sm:text-lg tracking-tight">آرمان موتور</span>
+                            <span class="hidden sm:inline-block text-[11px] bg-slate-800 text-blue-300 px-2 py-0.5 rounded-md border border-slate-700">سیستم جامع QC</span>
+                        </div>
+                        <p class="text-[11px] text-slate-400 hidden sm:block">کنترل کیفیت حین تولید، مجوز شروع خط و تحلیل پارتو</p>
+                    </div>
+                </div>
+
+                <!-- اطلاعات کاربر لاگین شده و دکمه خروج -->
+                <div class="flex items-center gap-2 sm:gap-3">
+                    <div class="flex items-center gap-2.5 bg-slate-800/90 px-3 py-1.5 rounded-xl border border-slate-700">
+                        <div id="header-role-dot" class="w-2.5 h-2.5 rounded-full bg-emerald-400"></div>
+                        <div class="text-right">
+                            <div id="header-user-name" class="text-xs sm:text-sm font-bold text-white leading-tight">نام کاربر</div>
+                            <div id="header-user-role" class="text-[10px] sm:text-[11px] text-slate-300 font-medium">نقش کاربر</div>
+                        </div>
+                    </div>
+                    <button onclick="logout()" title="خروج یا تغییر کاربر"
+                        class="p-2.5 bg-slate-800 hover:bg-red-600/90 text-slate-300 hover:text-white rounded-xl border border-slate-700 hover:border-red-500 transition flex items-center gap-1.5 text-xs font-bold">
+                        <i data-lucide="log-out" class="w-4 h-4"></i>
+                        <span class="hidden md:inline">خروج / تغییر نقش</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- نوار ناوبری تب‌ها (Navigation Tabs) -->
+            <nav class="bg-slate-800/80 border-t border-slate-700/80 overflow-x-auto">
+                <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center gap-1 sm:gap-2 py-2" id="nav-tabs">
+                    <button data-tab="inspection" onclick="switchTab('inspection')"
+                        class="nav-btn flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold whitespace-nowrap transition">
+                        <i data-lucide="clipboard-list" class="w-4 h-4"></i>
+                        <span>ثبت بازرسی کیفیت</span>
+                    </button>
+                    <button data-tab="permit" onclick="switchTab('permit')"
+                        class="nav-btn flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold whitespace-nowrap transition">
+                        <i data-lucide="file-check-2" class="w-4 h-4"></i>
+                        <span>مجوز شروع به کار خط</span>
+                    </button>
+                    <button data-tab="dashboard" onclick="switchTab('dashboard')"
+                        class="nav-btn flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold whitespace-nowrap transition">
+                        <i data-lucide="pie-chart" class="w-4 h-4"></i>
+                        <span>داشبورد و نمودار پارتو</span>
+                    </button>
+                    <button data-tab="records" onclick="switchTab('records')"
+                        class="nav-btn flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold whitespace-nowrap transition">
+                        <i data-lucide="database" class="w-4 h-4"></i>
+                        <span>سوابق جامع و اکسل</span>
+                    </button>
+                    <!-- تب اختصاصی ادمین (فقط برای نقش admin نمایش داده می‌شود) -->
+                    <button id="tab-btn-admin" data-tab="admin" onclick="switchTab('admin')"
+                        class="nav-btn hidden flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold whitespace-nowrap transition border border-purple-500/40 bg-purple-950/40 text-purple-200 hover:bg-purple-900/60">
+                        <i data-lucide="shield-alert" class="w-4 h-4 text-purple-400"></i>
+                        <span>مدیریت کاربران و ادمین</span>
+                    </button>
+                </div>
+            </nav>
+        </header>
+
+        <!-- محتوای اصلی تب‌ها -->
+        <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
+
+            <!-- ==================== تب ۱: ثبت بازرسی کنترل کیفیت ==================== -->
+            <section id="tab-inspection" class="tab-content space-y-6 fade-in">
+                <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 sm:p-6">
+                    <div class="flex flex-wrap items-center justify-between gap-3 pb-4 mb-5 border-b border-slate-100">
+                        <div class="flex items-center gap-3">
+                            <div class="p-2.5 bg-blue-50 text-blue-700 rounded-xl">
+                                <i data-lucide="clipboard-check" class="w-6 h-6"></i>
+                            </div>
+                            <div>
+                                <h2 class="text-lg font-extrabold text-slate-900">فرم سریع ثبت بازرسی کنترل کیفیت</h2>
+                                <p class="text-xs text-slate-500">انتخاب سریع بدون نیاز به تایپ — عیوب و تعداد به صورت کشویی ثبت می‌شوند</p>
+                            </div>
+                        </div>
+                        <span class="text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 px-3 py-1.5 rounded-xl">
+                            تاریخ: <span id="today-date-label"></span>
+                        </span>
+                    </div>
+
+                    <form id="inspection-form" class="space-y-6">
+                        <!-- اطلاعات پایه بازرسی -->
+                        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                            <div>
+                                <label class="block text-xs font-bold text-slate-700 mb-1.5">نام بازرس کنترل کیفیت</label>
+                                <input type="text" id="insp-inspector" readonly
+                                    class="w-full px-3.5 py-2.5 bg-slate-100 border border-slate-200 rounded-xl text-sm font-bold text-slate-700 cursor-not-allowed">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-bold text-slate-700 mb-1.5">شیفت کاری</label>
+                                <select id="insp-shift" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm font-medium focus:ring-2 focus:ring-blue-600 outline-none">
+                                    <option value="صبح (۰۷:۰۰ تا ۱۵:۰۰)">شیفت صبح (۰۷:۰۰ تا ۱۵:۰۰)</option>
+                                    <option value="عصر (۱۵:۰۰ تا ۲۳:۰۰)">شیفت عصر (۱۵:۰۰ تا ۲۳:۰۰)</option>
+                                    <option value="شب (۲۳:۰۰ تا ۰۷:۰۰)">شیفت شب (۲۳:۰۰ تا ۰۷:۰۰)</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-xs font-bold text-slate-700 mb-1.5">خط تولید / ایستگاه</label>
+                                <select id="insp-line" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm font-medium focus:ring-2 focus:ring-blue-600 outline-none">
+                                    <option value="خط مونتاژ صندلی جلو (Line A1)">خط مونتاژ صندلی جلو (Line A1)</option>
+                                    <option value="خط مجموعه پدال و مکانیزم (Line B2)">خط مجموعه پدال و مکانیزم (Line B2)</option>
+                                    <option value="سالن پرس و قطعات فلزی (Press-01)">سالن پرس و قطعات فلزی (Press-01)</option>
+                                    <option value="سالن تزریق قطعات پلیمری (Inj-03)">سالن تزریق قطعات پلیمری (Inj-03)</option>
+                                    <option value="ایستگاه کنترل اقلام ورودی (IQC)">ایستگاه کنترل اقلام ورودی (IQC)</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-xs font-bold text-slate-700 mb-1.5">تعداد کل قطعات بازرسی شده (بچ)</label>
+                                <select id="insp-batch-size" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm font-bold text-blue-800 focus:ring-2 focus:ring-blue-600 outline-none">
+                                    <!-- با جاوااسکریپت پر می‌شود -->
+                                </select>
+                            </div>
+                        </div>
+
+                        <!-- انتخاب محصول و کد قطعه -->
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 bg-slate-50 p-4 rounded-2xl border border-slate-200/80">
+                            <div>
+                                <label class="block text-xs font-bold text-slate-700 mb-1.5">انتخاب محصول / قطعه (از کاتالوگ آرمان موتور)</label>
+                                <select id="insp-product" required class="w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-sm font-bold text-slate-800 focus:ring-2 focus:ring-blue-600 outline-none">
+                                    <!-- داینامیک از لیست محصولات -->
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-xs font-bold text-slate-700 mb-1.5">شماره ردیابی / سریال بچ یا پالت (اختیاری)</label>
+                                <input type="text" id="insp-serial" placeholder="مثال: LOT-1403-884 یا بارکد پالت"
+                                    class="w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-blue-600 outline-none">
+                            </div>
+                        </div>
+
+                        <!-- بخش ثبت ردیف‌های عیوب (با انتخابگر کشویی ۱ تا ۲۰۰) -->
+                        <div class="space-y-3">
+                            <div class="flex flex-wrap items-center justify-between gap-2">
+                                <div>
+                                    <h3 class="text-sm font-extrabold text-slate-800">ثبت عیوب مشاهده شده در این بچ</h3>
+                                    <p class="text-[11px] text-slate-500">اگر بچ کاملاً سالم است، ردیف عیب اضافه نکنید و مستقیم ثبت نمایید.</p>
+                                </div>
+                                <button type="button" onclick="addDefectRow()"
+                                    class="px-3.5 py-2 bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold rounded-xl shadow-sm transition flex items-center gap-1.5">
+                                    <i data-lucide="plus-circle" class="w-4 h-4"></i>
+                                    <span>افزودن ردیف عیب جدید</span>
+                                </button>
+                            </div>
+
+                            <div id="defect-rows-container" class="space-y-2.5">
+                                <!-- ردیف‌های عیب اینجا اضافه می‌شوند -->
+                            </div>
+                        </div>
+
+                        <!-- توضیحات تکمیلی و دکمه ثبت -->
+                        <div class="pt-4 border-t border-slate-100 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4">
+                            <input type="text" id="insp-notes" placeholder="توضیحات تکمیلی یا اقدام اصلاحی فوری (در صورت نیاز)..."
+                                class="flex-1 px-4 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-blue-600 outline-none">
+                            <button type="submit"
+                                class="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl shadow-md shadow-blue-600/20 transition flex items-center justify-center gap-2 shrink-0">
+                                <i data-lucide="check-circle-2" class="w-5 h-5"></i>
+                                <span>ثبت نهایی گزارش بازرسی</span>
+                            </button>
+                        </div>
+                    </form>
+                </div>
+
+                <!-- ۵ بازرسی اخیر ثبت شده -->
+                <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-5">
+                    <h3 class="text-sm font-extrabold text-slate-800 mb-3 flex items-center gap-2">
+                        <i data-lucide="history" class="w-4 h-4 text-blue-600"></i>
+                        <span>آخرین بازرسی‌های ثبت‌شده امروز</span>
+                    </h3>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-right text-xs">
+                            <thead class="bg-slate-50 text-slate-600 border-b border-slate-200">
+                                <tr>
+                                    <th class="py-2.5 px-3 font-bold">کد محصول / نام قطعه</th>
+                                    <th class="py-2.5 px-3 font-bold">خط / شیفت</th>
+                                    <th class="py-2.5 px-3 font-bold">بازرس</th>
+                                    <th class="py-2.5 px-3 font-bold">تعداد کل / معیوب</th>
+                                    <th class="py-2.5 px-3 font-bold">شرح عیوب</th>
+                                    <th class="py-2.5 px-3 font-bold">وضعیت</th>
+                                </tr>
+                            </thead>
+                            <tbody id="recent-inspections-tbody" class="divide-y divide-slate-100"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ==================== تب ۲: مجوز شروع به کار خط (Line Clearance) ==================== -->
+            <section id="tab-permit" class="tab-content hidden space-y-6 fade-in">
+                <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                    <!-- فرم صدور مجوز شروع به کار -->
+                    <div class="lg:col-span-5 bg-white rounded-2xl shadow-sm border border-slate-200 p-5 sm:p-6 h-fit">
+                        <div class="flex items-center gap-3 pb-4 mb-5 border-b border-slate-100">
+                            <div class="p-2.5 bg-emerald-50 text-emerald-700 rounded-xl">
+                                <i data-lucide="file-check-2" class="w-6 h-6"></i>
+                            </div>
+                            <div>
+                                <h2 class="text-base font-extrabold text-slate-900">صدور مجوز شروع به کار خط</h2>
+                                <p class="text-xs text-slate-500">چک‌لیست راه‌اندازی، قالب و تایید قطعه شاهد</p>
+                            </div>
+                        </div>
+
+                        <form id="permit-form" class="space-y-4">
+                            <div>
+                                <label class="block text-xs font-bold text-slate-700 mb-1.5">خط تولید / دستگاه</label>
+                                <select id="permit-line" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm font-medium outline-none focus:ring-2 focus:ring-emerald-600">
+                                    <option value="خط مونتاژ صندلی جلو (Line A1)">خط مونتاژ صندلی جلو (Line A1)</option>
+                                    <option value="خط مجموعه پدال و مکانیزم (Line B2)">خط مجموعه پدال و مکانیزم (Line B2)</option>
+                                    <option value="سالن پرس و قطعات فلزی (Press-01)">سالن پرس و قطعات فلزی (Press-01)</option>
+                                    <option value="سالن تزریق قطعات پلیمری (Inj-03)">سالن تزریق قطعات پلیمری (Inj-03)</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-xs font-bold text-slate-700 mb-1.5">محصول / کد قطعه برنامه‌ریزی شده</label>
+                                <select id="permit-product" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm font-bold outline-none focus:ring-2 focus:ring-emerald-600"></select>
+                            </div>
+
+                            <!-- چک‌لیست‌های کنترلی -->
+                            <div class="space-y-2.5 bg-slate-50 p-3.5 rounded-xl border border-slate-200">
+                                <label class="flex items-center justify-between text-xs font-bold text-slate-700 cursor-pointer">
+                                    <span>۱. پاکسازی خط از قطعات بچ قبلی (Line Clearance)</span>
+                                    <input type="checkbox" id="chk-clean" checked class="w-4 h-4 accent-emerald-600 rounded">
+                                </label>
+                                <label class="flex items-center justify-between text-xs font-bold text-slate-700 cursor-pointer">
+                                    <span>۲. سلامت قالب، فیکسچر و گیج‌های کنترلی</span>
+                                    <input type="checkbox" id="chk-mold" checked class="w-4 h-4 accent-emerald-600 rounded">
+                                </label>
+                                <label class="flex items-center justify-between text-xs font-bold text-slate-700 cursor-pointer">
+                                    <span>۳. تطابق پارامترهای دستگاه با برگه فرآیند (SOP)</span>
+                                    <input type="checkbox" id="chk-params" checked class="w-4 h-4 accent-emerald-600 rounded">
+                                </label>
+                                <label class="flex items-center justify-between text-xs font-bold text-slate-700 cursor-pointer">
+                                    <span>۴. تایید ابعادی و ظاهری قطعه شاهد (First-Off)</span>
+                                    <input type="checkbox" id="chk-firstpiece" checked class="w-4 h-4 accent-emerald-600 rounded">
+                                </label>
+                            </div>
+
+                            <div>
+                                <label class="block text-xs font-bold text-slate-700 mb-1.5">رای نهایی مجوز شروع به کار</label>
+                                <select id="permit-status" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm font-bold outline-none focus:ring-2 focus:ring-emerald-600">
+                                    <option value="تایید شده">🟢 تایید شده (مجاز به تولید انبوه)</option>
+                                    <option value="تایید مشروط">🟡 تایید مشروط (نیاز به پایش ساعتی)</option>
+                                    <option value="عدم تایید">🔴 عدم تایید (توقف خط تا رفع مغایرت)</option>
+                                </select>
+                            </div>
+
+                            <div>
+                                <label class="block text-xs font-bold text-slate-700 mb-1.5">شرح شروط یا علت عدم تایید</label>
+                                <input type="text" id="permit-note" placeholder="مثال: گشتاور پیچ شماره ۴ مجدد کالیبره شد"
+                                    class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm outline-none focus:ring-2 focus:ring-emerald-600">
+                            </div>
+
+                            <button type="submit" class="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl shadow-md transition flex items-center justify-center gap-2">
+                                <i data-lucide="stamp" class="w-4 h-4"></i>
+                                <span>ثبت و صدور برگ مجوز خط</span>
+                            </button>
+                        </form>
+                    </div>
+
+                    <!-- لیست مجوزهای صادر شده -->
+                    <div class="lg:col-span-7 bg-white rounded-2xl shadow-sm border border-slate-200 p-5 sm:p-6">
+                        <div class="flex flex-wrap items-center justify-between gap-3 pb-4 mb-4 border-b border-slate-100">
+                            <div>
+                                <h2 class="text-base font-extrabold text-slate-900">وضعیت مجوزهای شروع به کار خطوط</h2>
+                                <p class="text-xs text-slate-500">کارشناسان و مدیران می‌توانند وضعیت مجوز را تغییر دهند</p>
+                            </div>
+                            <select id="permit-filter-status" onchange="renderPermits()" class="px-3 py-1.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-bold outline-none">
+                                <option value="ALL">همه وضعیت‌ها</option>
+                                <option value="تایید شده">تایید شده</option>
+                                <option value="تایید مشروط">تایید مشروط</option>
+                                <option value="عدم تایید">عدم تایید</option>
+                            </select>
+                        </div>
+
+                        <div id="permits-list-container" class="space-y-3">
+                            <!-- کارت‌های مجوز اینجا رندر می‌شوند -->
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ==================== تب ۳: داشبورد و نمودار پارتو (Pareto) ==================== -->
+            <section id="tab-dashboard" class="tab-content hidden space-y-6 fade-in">
+                <!-- فیلتر بالای داشبورد -->
+                <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-4 flex flex-wrap items-center justify-between gap-4">
+                    <div class="flex items-center gap-2.5">
+                        <div class="p-2 bg-indigo-50 text-indigo-700 rounded-xl">
+                            <i data-lucide="bar-chart-2" class="w-5 h-5"></i>
+                        </div>
+                        <div>
+                            <h2 class="text-base font-extrabold text-slate-900">داشبورد تحلیلی کنترل کیفیت و پارتو عیوب</h2>
+                            <p class="text-xs text-slate-500">شناسایی ۲۰٪ علل حیاتی ایجادکننده ۸۰٪ ضایعات و دوباره کاری</p>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <label class="text-xs font-bold text-slate-600">فیلتر محصول:</label>
+                        <select id="dashboard-product-filter" onchange="updateDashboard()" class="px-3.5 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-bold text-slate-800 outline-none focus:ring-2 focus:ring-blue-600">
+                            <option value="ALL">کل محصولات آرمان موتور</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- کارت‌های KPI -->
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200">
+                        <div class="flex items-center justify-between mb-2">
+                            <span class="text-xs font-bold text-slate-500">کل قطعات بازرسی‌شده</span>
+                            <div class="p-2 bg-blue-50 text-blue-600 rounded-lg"><i data-lucide="layers" class="w-4 h-4"></i></div>
+                        </div>
+                        <div id="kpi-total-inspected" class="text-2xl font-extrabold text-slate-900">۰</div>
+                        <div class="text-[11px] text-slate-400 mt-1">مجموع بچ‌های کنترل شده</div>
+                    </div>
+
+                    <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200">
+                        <div class="flex items-center justify-between mb-2">
+                            <span class="text-xs font-bold text-slate-500">کل قطعات معیوب ثبت‌شده</span>
+                            <div class="p-2 bg-red-50 text-red-600 rounded-lg"><i data-lucide="alert-octagon" class="w-4 h-4"></i></div>
+                        </div>
+                        <div id="kpi-total-defects" class="text-2xl font-extrabold text-red-600">۰</div>
+                        <div class="text-[11px] text-slate-400 mt-1">مجموع عیوب در دسته‌های مختلف</div>
+                    </div>
+
+                    <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200">
+                        <div class="flex items-center justify-between mb-2">
+                            <span class="text-xs font-bold text-slate-500">نرخ کلی عیوب (Defect Rate)</span>
+                            <div class="p-2 bg-amber-50 text-amber-600 rounded-lg"><i data-lucide="percent" class="w-4 h-4"></i></div>
+                        </div>
+                        <div id="kpi-defect-rate" class="text-2xl font-extrabold text-amber-600">۰٪</div>
+                        <div class="text-[11px] text-slate-400 mt-1">حد مجاز هدف شرکت: زیر ۲.۵٪</div>
+                    </div>
+
+                    <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200">
+                        <div class="flex items-center justify-between mb-2">
+                            <span class="text-xs font-bold text-slate-500">وضعیت مجوزهای فعال خط</span>
+                            <div class="p-2 bg-emerald-50 text-emerald-600 rounded-lg"><i data-lucide="check-circle" class="w-4 h-4"></i></div>
+                        </div>
+                        <div id="kpi-permits-summary" class="text-xl font-extrabold text-emerald-700">۰ تایید / ۰ توقف</div>
+                        <div class="text-[11px] text-slate-400 mt-1">آخرین وضعیت خطوط تولید</div>
+                    </div>
+                </div>
+
+                <!-- نمودار پارتو + جدول تحلیل ۸۰/۲۰ -->
+                <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                    <div class="lg:col-span-8 bg-white p-5 sm:p-6 rounded-2xl shadow-sm border border-slate-200">
+                        <div class="flex items-center justify-between mb-4">
+                            <h3 class="text-sm font-extrabold text-slate-900">نمودار پارتو عیوب (فراوانی + درصد تجمعی)</h3>
+                            <span class="text-[11px] bg-blue-50 text-blue-700 px-2.5 py-1 rounded-lg font-bold">اصل پارتو ۸۰/۲۰</span>
+                        </div>
+                        <div class="relative h-80 w-full">
+                            <canvas id="paretoChart"></canvas>
+                        </div>
+                    </div>
+
+                    <div class="lg:col-span-4 bg-white p-5 sm:p-6 rounded-2xl shadow-sm border border-slate-200 flex flex-col">
+                        <h3 class="text-sm font-extrabold text-slate-900 mb-3">رتبه‌بندی عیوب بحرانی (گلوگاه‌ها)</h3>
+                        <div class="flex-1 overflow-y-auto">
+                            <table class="w-full text-right text-xs">
+                                <thead class="bg-slate-50 text-slate-600 border-b border-slate-200">
+                                    <tr>
+                                        <th class="py-2 px-2.5 font-bold">نوع عیب</th>
+                                        <th class="py-2 px-2.5 font-bold">تعداد</th>
+                                        <th class="py-2 px-2.5 font-bold">تجمعی</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="pareto-table-tbody" class="divide-y divide-slate-100"></tbody>
+                            </table>
+                        </div>
+                        <div class="mt-4 p-3 bg-amber-50 border border-amber-200 rounded-xl text-[11px] text-amber-900 leading-relaxed">
+                            <strong>توصیه مهندسی کیفیت:</strong> تمرکز اقدامات اصلاحی (CAPA) روی عیوب با درصد تجمعی زیر <strong>۸۰٪</strong> بیشترین کاهش ضایعات را ایجاد می‌کند.
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ==================== تب ۴: سوابق جامع و خروجی اکسل ==================== -->
+            <section id="tab-records" class="tab-content hidden space-y-6 fade-in">
+                <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 sm:p-6">
+                    <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 mb-5 border-b border-slate-100">
+                        <div>
+                            <h2 class="text-lg font-extrabold text-slate-900">بانک جامع سوابق بازرسی کنترل کیفیت</h2>
+                            <p class="text-xs text-slate-500">جستجو، فیلتر، بررسی کارشناسی و خروجی استاندارد اکسل (.xlsx)</p>
+                        </div>
+                        <div class="flex flex-wrap items-center gap-2.5">
+                            <div class="relative">
+                                <input type="text" id="records-search" oninput="renderRecordsTable()" placeholder="جستجو کد قطعه، بازرس، خط..."
+                                    class="pl-3 pr-9 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs focus:ring-2 focus:ring-blue-600 outline-none w-56">
+                                <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute right-3 top-2.5"></i>
+                            </div>
+                            <button onclick="exportToExcel()"
+                                class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl shadow-sm transition flex items-center gap-2">
+                                <i data-lucide="file-spreadsheet" class="w-4 h-4"></i>
+                                <span>خروجی اکسل (.xlsx)</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-right text-xs">
+                            <thead class="bg-slate-100 text-slate-700 border-b border-slate-200">
+                                <tr>
+                                    <th class="py-3 px-3 font-bold">شناسه</th>
+                                    <th class="py-3 px-3 font-bold">تاریخ و شیفت</th>
+                                    <th class="py-3 px-3 font-bold">کد و نام محصول</th>
+                                    <th class="py-3 px-3 font-bold">خط تولید</th>
+                                    <th class="py-3 px-3 font-bold">بازرس</th>
+                                    <th class="py-3 px-3 font-bold">بچ / معیوب</th>
+                                    <th class="py-3 px-3 font-bold">جزئیات عیوب ثبت شده</th>
+                                    <th class="py-3 px-3 font-bold">وضعیت تایید</th>
+                                    <th class="py-3 px-3 font-bold text-center">عملیات</th>
+                                </tr>
+                            </thead>
+                            <tbody id="all-records-tbody" class="divide-y divide-slate-100"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ==================== تب ۵: پنل ادمین و مدیریت کاربران (فقط ADMIN) ==================== -->
+            <section id="tab-admin" class="tab-content hidden space-y-6 fade-in">
+                <!-- بنر معرفی پنل ادمین -->
+                <div class="bg-gradient-to-l from-purple-900 to-navy-900 text-white rounded-2xl p-5 sm:p-6 shadow-md flex flex-wrap items-center justify-between gap-4">
+                    <div class="flex items-center gap-3.5">
+                        <div class="p-3 bg-purple-600/40 border border-purple-400/30 rounded-2xl">
+                            <i data-lucide="shield-check" class="w-7 h-7 text-purple-200"></i>
+                        </div>
+                        <div>
+                            <h2 class="text-lg font-extrabold">پنل مدیریت سیستم و سطوح دسترسی (Admin Panel)</h2>
+                            <p class="text-xs text-purple-200 mt-0.5">مدیریت حساب‌های بازرسان و کارشناسان، کدهای محصولات و استاندارد عیوب آرمان موتور</p>
+                        </div>
+                    </div>
+                    <button onclick="confirmResetDemoData()"
+                        class="px-4 py-2.5 bg-white/10 hover:bg-red-600 text-white border border-white/20 hover:border-red-500 rounded-xl text-xs font-bold transition flex items-center gap-2">
+                        <i data-lucide="rotate-ccw" class="w-4 h-4"></i>
+                        <span>بازنشانی کل داده‌های دمو به حالت اولیه</span>
+                    </button>
+                </div>
+
+                <!-- بخش ۱: مدیریت کاربران و سطوح دسترسی -->
+                <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                    <!-- فرم افزودن/ویرایش کاربر -->
+                    <div class="lg:col-span-4 bg-white rounded-2xl shadow-sm border border-slate-200 p-5 h-fit">
+                        <h3 id="user-form-title" class="text-sm font-extrabold text-slate-900 pb-3 mb-4 border-b border-slate-100 flex items-center gap-2">
+                            <i data-lucide="user-plus" class="w-4 h-4 text-purple-600"></i>
+                            <span>تعریف کاربر جدید (بازرس / کارشناس / ادمین)</span>
+                        </h3>
+                        <form id="admin-user-form" class="space-y-3.5">
+                            <input type="hidden" id="edit-user-id">
+                            <div>
+                                <label class="block text-xs font-bold text-slate-700 mb-1">نام و نام خانوادگی</label>
+                                <input type="text" id="admin-user-fullname" required placeholder="مثال: مهندس سارا کریمی"
+                                    class="w-full px-3.5 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs focus:ring-2 focus:ring-purple-600 outline-none">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-bold text-slate-700 mb-1">نام کاربری (یا کد پرسنلی)</label>
+                                <input type="text" id="admin-user-username" required placeholder="مثال: karimi یا 1085"
+                                    class="w-full px-3.5 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs focus:ring-2 focus:ring-purple-600 outline-none">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-bold text-slate-700 mb-1">رمز عبور</label>
+                                <input type="text" id="admin-user-password" required placeholder="مثال: 1234"
+                                    class="w-full px-3.5 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs focus:ring-2 focus:ring-purple-600 outline-none">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-bold text-slate-700 mb-1">سطح دسترسی (نقش سازمانی)</label>
+                                <select id="admin-user-role" class="w-full px-3.5 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-bold focus:ring-2 focus:ring-purple-600 outline-none">
+                                    <option value="inspector">بازرس کنترل کیفیت (ثبت بازرسی و مجوز خط)</option>
+                                    <option value="specialist">کارشناس / مدیر کیفیت (داشبورد پارتو، تایید مجوز، اکسل)</option>
+                                    <option value="admin">مدیر سیستم / ادمین (دسترسی کامل به همه بخش‌ها)</option>
+                                </select>
+                            </div>
+                            <div class="flex items-center gap-2 pt-2">
+                                <button type="submit" id="save-user-btn"
+                                    class="flex-1 py-2.5 bg-purple-700 hover:bg-purple-800 text-white text-xs font-bold rounded-xl shadow-sm transition">
+                                    ذخیره کاربر
+                                </button>
+                                <button type="button" id="cancel-edit-user-btn" onclick="resetUserForm()"
+                                    class="hidden px-3 py-2.5 bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs font-bold rounded-xl transition">
+                                    انصراف
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+
+                    <!-- جدول لیست کاربران سیستم -->
+                    <div class="lg:col-span-8 bg-white rounded-2xl shadow-sm border border-slate-200 p-5">
+                        <div class="flex items-center justify-between pb-3 mb-4 border-b border-slate-100">
+                            <h3 class="text-sm font-extrabold text-slate-900 flex items-center gap-2">
+                                <i data-lucide="users" class="w-4 h-4 text-purple-600"></i>
+                                <span>لیست کاربران و سطوح دسترسی سامانه</span>
+                            </h3>
+                            <span id="users-count-badge" class="text-xs font-bold bg-purple-50 text-purple-700 px-2.5 py-1 rounded-lg">۰ کاربر</span>
+                        </div>
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-right text-xs">
+                                <thead class="bg-slate-50 text-slate-600 border-b border-slate-200">
+                                    <tr>
+                                        <th class="py-2.5 px-3 font-bold">نام و نام خانوادگی</th>
+                                        <th class="py-2.5 px-3 font-bold">نام کاربری</th>
+                                        <th class="py-2.5 px-3 font-bold">رمز عبور</th>
+                                        <th class="py-2.5 px-3 font-bold">نقش / سطح دسترسی</th>
+                                        <th class="py-2.5 px-3 font-bold">وضعیت حساب</th>
+                                        <th class="py-2.5 px-3 font-bold text-center">مدیریت</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="admin-users-tbody" class="divide-y divide-slate-100"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- بخش ۲: مدیریت کاتالوگ محصولات و عیوب استاندارد -->
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <!-- مدیریت محصولات و کد قطعات -->
+                    <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-5">
+                        <h3 class="text-sm font-extrabold text-slate-900 pb-3 mb-4 border-b border-slate-100 flex items-center gap-2">
+                            <i data-lucide="package" class="w-4 h-4 text-blue-600"></i>
+                            <span>مدیریت کاتالوگ محصولات و پیش‌کد قطعات</span>
+                        </h3>
+                        <form id="admin-product-form" class="flex flex-col sm:flex-row gap-2 mb-4">
+                            <input type="text" id="new-prod-code" required placeholder="کد (مثلاً: AM-ST-105)"
+                                class="sm:w-36 px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-mono outline-none focus:ring-2 focus:ring-blue-600">
+                            <input type="text" id="new-prod-name" required placeholder="نام قطعه / محصول (مثلاً: فریم صندلی عقب)"
+                                class="flex-1 px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs outline-none focus:ring-2 focus:ring-blue-600">
+                            <button type="submit" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl shrink-0">
+                                + افزودن قطعه
+                            </button>
+                        </form>
+                        <div id="admin-products-list" class="max-h-60 overflow-y-auto divide-y divide-slate-100 border border-slate-100 rounded-xl"></div>
+                    </div>
+
+                    <!-- مدیریت لیست عیوب استاندارد -->
+                    <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-5">
+                        <h3 class="text-sm font-extrabold text-slate-900 pb-3 mb-4 border-b border-slate-100 flex items-center gap-2">
+                            <i data-lucide="alert-circle" class="w-4 h-4 text-amber-600"></i>
+                            <span>مدیریت لیست عیوب استاندارد (در فرم بازرسان)</span>
+                        </h3>
+                        <form id="admin-defect-form" class="flex gap-2 mb-4">
+                            <input type="text" id="new-defect-name" required placeholder="عنوان عیب جدید (مثلاً: عدم تطابق رنگ تریم)"
+                                class="flex-1 px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs outline-none focus:ring-2 focus:ring-amber-600">
+                            <button type="submit" class="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold rounded-xl shrink-0">
+                                + افزودن عیب
+                            </button>
+                        </form>
+                        <div id="admin-defects-list" class="max-h-60 overflow-y-auto divide-y divide-slate-100 border border-slate-100 rounded-xl"></div>
+                    </div>
+                </div>
+            </section>
+
+        </main>
+    </div>
+
+    <script>
+        // ==================== داده‌های اولیه پیش‌فرض آرمان موتور ====================
+        const DEFAULT_USERS = [
+            { id: 'u1', fullName: 'مهندس رضا محمدی (مدیر سیستم)', username: 'admin', password: '1234', role: 'admin', active: true },
+            { id: 'u2', fullName: 'مهندس مریم حسینی', username: 'specialist', password: '1234', role: 'specialist', active: true },
+            { id: 'u3', fullName: 'علی رضایی (بازرس خط A)', username: 'inspector', password: '1234', role: 'inspector', active: true },
+            { id: 'u4', fullName: 'حسین کاظمی (بازرس پرس)', username: '1045', password: '1234', role: 'inspector', active: true }
+        ];
+
+        const DEFAULT_PRODUCTS = [
+            { code: 'AM-FS-101', name: 'مجموعه کامل صندلی جلو چپ (راننده)' },
+            { code: 'AM-FS-102', name: 'مجموعه کامل صندلی جلو راست (شاگرد)' },
+            { code: 'AM-PD-204', name: 'مجموعه پدال گاز و ترمز کامل' },
+            { code: 'AM-MT-309', name: 'براکت فلزی تقویت شاسی (ورق ۲ میل)' },
+            { code: 'AM-MT-315', name: 'ریل کشویی صندلی (قطعه فلزی)' },
+            { code: 'AM-PL-410', name: 'قاب کناری پلیمری صندلی (تزریق ABS)' },
+            { code: 'AM-PL-422', name: 'دستگیره تنظیم پشتی (غیرفلزی)' }
+        ];
+
+        const DEFAULT_DEFECT_TYPES = [
+            'خط و خش و آسیب ظاهری سطح',
+            'نقص جوشکاری (پاشش / نفوذ ناقص)',
+            'عدم انطباق ابعادی و خارج از تلرانس گیج',
+            'پلیسه و لبه‌تیزی قطعه فلزی/پلیمری',
+            'لقی یا سفتی بیش از حد مکانیزم حرکتی',
+            'کسری قطعه / عدم مونتاژ پیچ و خار',
+            'نقص رنگ یا پوشش سطحی (شره / پوست پرتقالی)',
+            'تغییر شکل و تابیدگی قطعه'
+        ];
+
+        const DEFAULT_INSPECTIONS = [
+            {
+                id: 'QC-1403-101',
+                date: '۱۴۰۳/۰۸/۲۸',
+                shift: 'صبح (۰۷:۰۰ تا ۱۵:۰۰)',
+                line: 'خط مونتاژ صندلی جلو (Line A1)',
+                productCode: 'AM-FS-101',
+                productName: 'مجموعه کامل صندلی جلو چپ (راننده)',
+                serial: 'LOT-A1-092',
+                inspector: 'علی رضایی (بازرس خط A)',
+                batchSize: 120,
+                defects: [
+                    { type: 'لقی یا سفتی بیش از حد مکانیزم حرکتی', count: 7 },
+                    { type: 'خط و خش و آسیب ظاهری سطح', count: 3 }
+                ],
+                notes: 'تنظیم مجدد فیکسچر ایستگاه ۳ انجام شد.',
+                verified: true
+            },
+            {
+                id: 'QC-1403-102',
+                date: '۱۴۰۳/۰۸/۲۸',
+                shift: 'عصر (۱۵:۰۰ تا ۲۳:۰۰)',
+                line: 'سالن پرس و قطعات فلزی (Press-01)',
+                productCode: 'AM-MT-309',
+                productName: 'براکت فلزی تقویت شاسی (ورق ۲ میل)',
+                serial: 'LOT-PR-441',
+                inspector: 'حسین کاظمی (بازرس پرس)',
+                batchSize: 200,
+                defects: [
+                    { type: 'پلیسه و لبه‌تیزی قطعه فلزی/پلیمری', count: 14 },
+                    { type: 'عدم انطباق ابعادی و خارج از تلرانس گیج', count: 5 }
+                ],
+                notes: 'نیاز به سنگ‌زنی سنبه قالب شماره ۲ در پایان شیفت.',
+                verified: true
+            },
+            {
+                id: 'QC-1403-103',
+                date: '۱۴۰۳/۰۸/۲۹',
+                shift: 'صبح (۰۷:۰۰ تا ۱۵:۰۰)',
+                line: 'خط مجموعه پدال و مکانیزم (Line B2)',
+                productCode: 'AM-PD-204',
+                productName: 'مجموعه پدال گاز و ترمز کامل',
+                serial: 'LOT-PD-118',
+                inspector: 'علی رضایی (بازرس خط A)',
+                batchSize: 150,
+                defects: [
+                    { type: 'نقص جوشکاری (پاشش / نفوذ ناقص)', count: 9 },
+                    { type: 'کسری قطعه / عدم مونتاژ پیچ و خار', count: 2 }
+                ],
+                notes: 'فشار گاز CO2 دستگاه جوش اصلاح گردید.',
+                verified: false
+            },
+            {
+                id: 'QC-1403-104',
+                date: '۱۴۰۳/۰۸/۲۹',
+                shift: 'صبح (۰۷:۰۰ تا ۱۵:۰۰)',
+                line: 'سالن تزریق قطعات پلیمری (Inj-03)',
+                productCode: 'AM-PL-410',
+                productName: 'قاب کناری پلیمری صندلی (تزریق ABS)',
+                serial: 'LOT-INJ-77',
+                inspector: 'حسین کاظمی (بازرس پرس)',
+                batchSize: 180,
+                defects: [
+                    { type: 'خط و خش و آسیب ظاهری سطح', count: 6 },
+                    { type: 'تغییر شکل و تابیدگی قطعه', count: 4 }
+                ],
+                notes: 'دمای سیلندر تزریق ۵ درجه کاهش یافت.',
+                verified: false
+            }
+        ];
+
+        const DEFAULT_PERMITS = [
+            {
+                id: 'PRM-401',
+                time: '۱۴۰۳/۰۸/۲۹ - ۰۷:۱۵',
+                line: 'خط مونتاژ صندلی جلو (Line A1)',
+                productCode: 'AM-FS-101',
+                productName: 'مجموعه کامل صندلی جلو چپ (راننده)',
+                issuer: 'علی رضایی (بازرس خط A)',
+                checks: { clean: true, mold: true, params: true, firstPiece: true },
+                status: 'تایید شده',
+                note: 'تمامی گیج‌های کنترلی و قطعه شاهد تایید شد.'
+            },
+            {
+                id: 'PRM-402',
+                time: '۱۴۰۳/۰۸/۲۹ - ۰۷:۴۰',
+                line: 'خط مجموعه پدال و مکانیزم (Line B2)',
+                productCode: 'AM-PD-204',
+                productName: 'مجموعه پدال گاز و ترمز کامل',
+                issuer: 'علی رضایی (بازرس خط A)',
+                checks: { clean: true, mold: true, params: false, firstPiece: true },
+                status: 'تایید مشروط',
+                note: 'نمونه‌برداری هر ۳۰ دقیقه یکبار بابت پارامتر جریان جوش الزامی است.'
+            },
+            {
+                id: 'PRM-403',
+                time: '۱۴۰۳/۰۸/۲۹ - ۰۸:۱۰',
+                line: 'سالن پرس و قطعات فلزی (Press-01)',
+                productCode: 'AM-MT-315',
+                productName: 'ریل کشویی صندلی (قطعه فلزی)',
+                issuer: 'حسین کاظمی (بازرس پرس)',
+                checks: { clean: true, mold: false, params: true, firstPiece: false },
+                status: 'عدم تایید',
+                note: 'لق بودن پین راهنمای قالب شماره ۳ - ارجاع به واحد قالب‌سازی.'
+            }
+        ];
+
+        // ==================== مدیریت State و LocalStorage ====================
+        const STORAGE_KEYS = {
+            USERS: 'arman_qc_users_v2',
+            PRODUCTS: 'arman_qc_products_v2',
+            DEFECTS: 'arman_qc_defects_v2',
+            INSPECTIONS: 'arman_qc_inspections_v2',
+            PERMITS: 'arman_qc_permits_v2',
+            CURRENT_USER: 'arman_qc_current_user_v2'
+        };
+
+        let state = {
+            users: [],
+            products: [],
+            defectTypes: [],
+            inspections: [],
+            permits: [],
+            currentUser: null,
+            activeTab: 'inspection'
+        };
+
+        let paretoChartInstance = null;
+
+        function loadState() {
+            state.users = JSON.parse(localStorage.getItem(STORAGE_KEYS.USERS)) || structuredClone(DEFAULT_USERS);
+            state.products = JSON.parse(localStorage.getItem(STORAGE_KEYS.PRODUCTS)) || structuredClone(DEFAULT_PRODUCTS);
+            state.defectTypes = JSON.parse(localStorage.getItem(STORAGE_KEYS.DEFECTS)) || structuredClone(DEFAULT_DEFECT_TYPES);
+            state.inspections = JSON.parse(localStorage.getItem(STORAGE_KEYS.INSPECTIONS)) || structuredClone(DEFAULT_INSPECTIONS);
+            state.permits = JSON.parse(localStorage.getItem(STORAGE_KEYS.PERMITS)) || structuredClone(DEFAULT_PERMITS);
+
+            const savedUser = JSON.parse(localStorage.getItem(STORAGE_KEYS.CURRENT_USER));
+            if (savedUser) {
+                // بررسی اینکه کاربر هنوز فعال باشد
+                const freshUser = state.users.find(u => u.id === savedUser.id && u.active);
+                state.currentUser = freshUser || null;
+            }
+            saveAllState();
+        }
+
+        function saveAllState() {
+            localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(state.users));
+            localStorage.setItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(state.products));
+            localStorage.setItem(STORAGE_KEYS.DEFECTS, JSON.stringify(state.defectTypes));
+            localStorage.setItem(STORAGE_KEYS.INSPECTIONS, JSON.stringify(state.inspections));
+            localStorage.setItem(STORAGE_KEYS.PERMITS, JSON.stringify(state.permits));
+            if (state.currentUser) {
+                localStorage.setItem(STORAGE_KEYS.CURRENT_USER, JSON.stringify(state.currentUser));
+            } else {
+                localStorage.removeItem(STORAGE_KEYS.CURRENT_USER);
+            }
+        }
+
+        // ==================== ابزارهای رابط کاربری (Toast & Confirm) ====================
+        function showToast(message, type = 'success') {
+            const container = document.getElementById('toast-container');
+            const colors = {
+                success: 'bg-emerald-600 text-white border-emerald-500',
+                error: 'bg-red-600 text-white border-red-500',
+                info: 'bg-navy-900 text-white border-slate-700',
+                warning: 'bg-amber-500 text-white border-amber-400'
+            };
+            const icons = {
+                success: 'check-circle',
+                error: 'x-circle',
+                info: 'info',
+                warning: 'alert-triangle'
+            };
+            const toast = document.createElement('div');
+            toast.className = `pointer-events-auto flex items-center gap-3 px-4 py-3 rounded-xl shadow-xl border text-xs font-bold fade-in ${colors[type] || colors.info}`;
+            toast.innerHTML = `<i data-lucide="${icons[type]}" class="w-4 h-4 shrink-0"></i><span>${message}</span>`;
+            container.appendChild(toast);
+            lucide.createIcons();
+            setTimeout(() => {
+                toast.style.opacity = '0';
+                toast.style.transition = 'opacity 0.3s';
+                setTimeout(() => toast.remove(), 300);
+            }, 3200);
+        }
+
+        function customConfirm(title, message, onConfirm) {
+            const modal = document.getElementById('confirm-modal');
+            document.getElementById('confirm-title').textContent = title;
+            document.getElementById('confirm-message').textContent = message;
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+
+            const okBtn = document.getElementById('confirm-ok-btn');
+            const cancelBtn = document.getElementById('confirm-cancel-btn');
+
+            const cleanup = () => {
+                modal.classList.add('hidden');
+                modal.classList.remove('flex');
+                okBtn.onclick = null;
+                cancelBtn.onclick = null;
+            };
+
+            okBtn.onclick = () => {
+                cleanup();
+                onConfirm();
+            };
+            cancelBtn.onclick = cleanup;
+        }
+
+        // ==================== احراز هویت و سطوح دسترسی ====================
+        const ROLE_LABELS = {
+            admin: { title: 'مدیر سیستم (Admin)', dot: 'bg-purple-400', badge: 'bg-purple-100 text-purple-800 border-purple-200' },
+            specialist: { title: 'کارشناس / مدیر کیفیت', dot: 'bg-blue-400', badge: 'bg-blue-100 text-blue-800 border-blue-200' },
+            inspector: { title: 'بازرس کنترل کیفیت', dot: 'bg-emerald-400', badge: 'bg-emerald-100 text-emerald-800 border-emerald-200' }
+        };
+
+        document.getElementById('login-form').addEventListener('submit', function(e) {
+            e.preventDefault();
+            const username = document.getElementById('login-username').value.trim();
+            const password = document.getElementById('login-password').value.trim();
+
+            const user = state.users.find(u => u.username.toLowerCase() === username.toLowerCase() && u.password === password);
+            if (!user) {
+                showToast('نام کاربری یا رمز عبور اشتباه است!', 'error');
+                return;
+            }
+            if (!user.active) {
+                showToast('این حساب کاربری توسط مدیر سیستم غیرفعال شده است.', 'error');
+                return;
+            }
+            loginSuccess(user);
+        });
+
+        function quickLogin(role) {
+            const user = state.users.find(u => u.role === role && u.active);
+            if (!user) {
+                showToast('کاربر فعالی با این نقش یافت نشد.', 'error');
+                return;
+            }
+            loginSuccess(user);
+        }
+
+        function loginSuccess(user) {
+            state.currentUser = user;
+            saveAllState();
+            document.getElementById('login-view').classList.add('hidden');
+            document.getElementById('app-view').classList.remove('hidden');
+
+            // به‌روزرسانی هدر
+            document.getElementById('header-user-name').textContent = user.fullName;
+            document.getElementById('header-user-role').textContent = ROLE_LABELS[user.role].title;
+            document.getElementById('header-role-dot').className = `w-2.5 h-2.5 rounded-full ${ROLE_LABELS[user.role].dot}`;
+
+            // نمایش یا مخفی‌سازی تب ادمین
+            const adminTabBtn = document.getElementById('tab-btn-admin');
+            if (user.role === 'admin') {
+                adminTabBtn.classList.remove('hidden');
+            } else {
+                adminTabBtn.classList.add('hidden');
+            }
+
+            // انتخاب تب پیش‌فرض بر اساس نقش
+            const defaultTab = user.role === 'specialist' ? 'dashboard' : (user.role === 'admin' ? 'admin' : 'inspection');
+            populateDropdowns();
+            switchTab(defaultTab);
+            showToast(`خوش آمدید، ${user.fullName}`, 'success');
+        }
+
+        function logout() {
+            state.currentUser = null;
+            saveAllState();
+            document.getElementById('app-view').classList.add('hidden');
+            document.getElementById('login-view').classList.remove('hidden');
+            document.getElementById('login-username').value = '';
+            document.getElementById('login-password').value = '';
+        }
+
+        function switchTab(tabName) {
+            // جلوگیری از ورود غیرمجاز به تب ادمین
+            if (tabName === 'admin' && state.currentUser?.role !== 'admin') {
+                showToast('شما دسترسی به پنل ادمین ندارید.', 'error');
+                return;
+            }
+            state.activeTab = tabName;
+
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+            document.getElementById(`tab-${tabName}`).classList.remove('hidden');
+
+            document.querySelectorAll('.nav-btn').forEach(btn => {
+                const isTarget = btn.dataset.tab === tabName;
+                if (btn.dataset.tab === 'admin') {
+                    btn.className = isTarget
+                        ? 'nav-btn flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold whitespace-nowrap transition bg-purple-600 text-white shadow-sm'
+                        : 'nav-btn flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold whitespace-nowrap transition border border-purple-500/40 bg-purple-950/40 text-purple-200 hover:bg-purple-900/60';
+                } else {
+                    btn.className = isTarget
+                        ? 'nav-btn flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold whitespace-nowrap transition bg-blue-600 text-white shadow-sm'
+                        : 'nav-btn flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold whitespace-nowrap transition text-slate-300 hover:bg-slate-700/70 hover:text-white';
+                }
+            });
+
+            // رفرش داده‌های تب انتخاب شده
+            if (tabName === 'inspection') {
+                document.getElementById('insp-inspector').value = state.currentUser.fullName;
+                renderRecentInspections();
+            } else if (tabName === 'permit') {
+                renderPermits();
+            } else if (tabName === 'dashboard') {
+                updateDashboard();
+            } else if (tabName === 'records') {
+                renderRecordsTable();
+            } else if (tabName === 'admin') {
+                renderAdminPanel();
+            }
+            lucide.createIcons();
+        }
+
+        // ==================== پر کردن لیست‌های کشویی ====================
+        function populateDropdowns() {
+            // تاریخ شمسی امروز (نمایشی/دقیق)
+            try {
+                const todayShamsi = new Intl.DateTimeFormat('fa-IR').format(new Date());
+                document.getElementById('today-date-label').textContent = todayShamsi;
+            } catch {
+                document.getElementById('today-date-label').textContent = '۱۴۰۳/۰۸/۳۰';
+            }
+
+            // انتخابگر تعداد بچ (از ۱۰ تا ۵۰۰ با گام ۱۰)
+            const batchSelect = document.getElementById('insp-batch-size');
+            batchSelect.innerHTML = '';
+            for (let i = 10; i <= 500; i += 10) {
+                const opt = document.createElement('option');
+                opt.value = i;
+                opt.textContent = `${i} عدد قطعه`;
+                if (i === 100) opt.selected = true;
+                batchSelect.appendChild(opt);
+            }
+
+            // محصولات در فرم بازرسی، فرم مجوز و فیلتر داشبورد
+            const inspProd = document.getElementById('insp-product');
+            const permitProd = document.getElementById('permit-product');
+            const dashProd = document.getElementById('dashboard-product-filter');
+
+            inspProd.innerHTML = '';
+            permitProd.innerHTML = '';
+            dashProd.innerHTML = '<option value="ALL">کل محصولات آرمان موتور</option>';
+
+            state.products.forEach(p => {
+                const label = `[${p.code}] ${p.name}`;
+                inspProd.add(new Option(label, p.code));
+                permitProd.add(new Option(label, p.code));
+                dashProd.add(new Option(label, p.code));
+            });
+        }
+
+        // ==================== منطق تب ۱: ثبت بازرسی کنترل کیفیت ====================
+        function createDefectNumberOptions() {
+            let options = '';
+            for (let i = 1; i <= 200; i++) {
+                options += `<option value="${i}">${i} عدد</option>`;
+            }
+            return options;
+        }
+
+        function addDefectRow() {
+            const container = document.getElementById('defect-rows-container');
+            const rowId = 'def-row-' + Date.now() + Math.random().toString(36).substring(2, 6);
+            const defectOptions = state.defectTypes.map(d => `<option value="${d}">${d}</option>`).join('');
+
+            const row = document.createElement('div');
+            row.id = rowId;
+            row.className = 'flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 bg-amber-50/70 p-3 rounded-xl border border-amber-200 fade-in';
+            row.innerHTML = `
+                <div class="flex-1">
+                    <label class="block text-[10px] font-bold text-amber-900 mb-1">نوع عیب مشاهده شده</label>
+                    <select class="defect-type-select w-full px-3 py-2 bg-white border border-amber-300 rounded-lg text-xs font-bold text-slate-800 outline-none">
+                        ${defectOptions}
+                    </select>
+                </div>
+                <div class="sm:w-36">
+                    <label class="block text-[10px] font-bold text-amber-900 mb-1">تعداد (۱ تا ۲۰۰)</label>
+                    <select class="defect-count-select w-full px-3 py-2 bg-white border border-amber-300 rounded-lg text-xs font-extrabold text-red-600 outline-none">
+                        ${createDefectNumberOptions()}
+                    </select>
+                </div>
+                <button type="button" onclick="document.getElementById('${rowId}').remove()"
+                    class="sm:mt-4 p-2 bg-white hover:bg-red-50 text-red-600 border border-amber-200 hover:border-red-300 rounded-lg transition flex items-center justify-center" title="حذف ردیف">
+                    <i data-lucide="trash-2" class="w-4 h-4"></i>
+                </button>
+            `;
+            container.appendChild(row);
+            lucide.createIcons();
+        }
+
+        document.getElementById('inspection-form').addEventListener('submit', function(e) {
+            e.preventDefault();
+            const productCode = document.getElementById('insp-product').value;
+            const productObj = state.products.find(p => p.code === productCode) || { code: productCode, name: productCode };
+            const batchSize = parseInt(document.getElementById('insp-batch-size').value, 10);
+
+            // جمع‌آوری ردیف‌های عیب
+            const defectRows = document.querySelectorAll('#defect-rows-container > div');
+            const defectsMap = {};
+            let totalDefective = 0;
+
+            defectRows.forEach(row => {
+                const type = row.querySelector('.defect-type-select').value;
+                const count = parseInt(row.querySelector('.defect-count-select').value, 10);
+                defectsMap[type] = (defectsMap[type] || 0) + count;
+                totalDefective += count;
+            });
+
+            if (totalDefective > batchSize) {
+                showToast('خطا: مجموع تعداد قطعات معیوب نمی‌تواند از تعداد کل بچ بیشتر باشد!', 'error');
+                return;
+            }
+
+            const defects = Object.entries(defectsMap).map(([type, count]) => ({ type, count }));
+            let todayStr = '۱۴۰۳/۰۸/۳۰';
+            try { todayStr = new Intl.DateTimeFormat('fa-IR').format(new Date()); } catch {}
+
+            const newRecord = {
+                id: 'QC-' + Math.floor(1000 + Math.random() * 9000),
+                date: todayStr,
+                shift: document.getElementById('insp-shift').value,
+                line: document.getElementById('insp-line').value,
+                productCode: productObj.code,
+                productName: productObj.name,
+                serial: document.getElementById('insp-serial').value.trim() || 'بدون سریال',
+                inspector: state.currentUser.fullName,
+                batchSize,
+                defects,
+                notes: document.getElementById('insp-notes').value.trim() || '-',
+                verified: false
+            };
+
+            state.inspections.unshift(newRecord);
+            saveAllState();
+
+            // ریست فرم
+            document.getElementById('defect-rows-container').innerHTML = '';
+            document.getElementById('insp-serial').value = '';
+            document.getElementById('insp-notes').value = '';
+            renderRecentInspections();
+            showToast('گزارش بازرسی با موفقیت در سیستم ثبت شد.', 'success');
+        });
+
+        function renderRecentInspections() {
+            const tbody = document.getElementById('recent-inspections-tbody');
+            const recent = state.inspections.slice(0, 5);
+            tbody.innerHTML = recent.map(item => {
+                const totalDef = item.defects.reduce((sum, d) => sum + d.count, 0);
+                const defectText = item.defects.length > 0
+                    ? item.defects.map(d => `${d.type} (${d.count})`).join('، ')
+                    : '<span class="text-emerald-600 font-bold">سالم (بدون عیب)</span>';
+                const statusBadge = totalDef === 0
+                    ? '<span class="px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 font-bold">تایید کامل</span>'
+                    : `<span class="px-2 py-0.5 rounded-md bg-amber-100 text-amber-800 font-bold">${totalDef} معیوب</span>`;
+
+                return `
+                    <tr class="hover:bg-slate-50">
+                        <td class="py-2.5 px-3 font-bold text-slate-800"><span class="font-mono text-blue-700">${item.productCode}</span> - ${item.productName}</td>
+                        <td class="py-2.5 px-3 text-slate-600">${item.line}</td>
+                        <td class="py-2.5 px-3 text-slate-600">${item.inspector}</td>
+                        <td class="py-2.5 px-3 font-bold">${item.batchSize} / <span class="${totalDef > 0 ? 'text-red-600' : 'text-emerald-600'}">${totalDef}</span></td>
+                        <td class="py-2.5 px-3 text-slate-600 max-w-xs truncate">${defectText}</td>
+                        <td class="py-2.5 px-3">${statusBadge}</td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        // ==================== منطق تب ۲: مجوز شروع به کار خط ====================
+        document.getElementById('permit-form').addEventListener('submit', function(e) {
+            e.preventDefault();
+            const productCode = document.getElementById('permit-product').value;
+            const productObj = state.products.find(p => p.code === productCode) || { code: productCode, name: productCode };
+
+            let timeStr = '۱۴۰۳/۰۸/۳۰ - ۰۸:۳۰';
+            try {
+                const now = new Date();
+                timeStr = `${new Intl.DateTimeFormat('fa-IR').format(now)} - ${now.toTimeString().slice(0,5)}`;
+            } catch {}
+
+            const newPermit = {
+                id: 'PRM-' + Math.floor(100 + Math.random() * 900),
+                time: timeStr,
+                line: document.getElementById('permit-line').value,
+                productCode: productObj.code,
+                productName: productObj.name,
+                issuer: state.currentUser.fullName,
+                checks: {
+                    clean: document.getElementById('chk-clean').checked,
+                    mold: document.getElementById('chk-mold').checked,
+                    params: document.getElementById('chk-params').checked,
+                    firstPiece: document.getElementById('chk-firstpiece').checked
+                },
+                status: document.getElementById('permit-status').value,
+                note: document.getElementById('permit-note').value.trim() || 'بدون توضیحات اضافی'
+            };
+
+            state.permits.unshift(newPermit);
+            saveAllState();
+            document.getElementById('permit-note').value = '';
+            renderPermits();
+            showToast(`برگ مجوز شروع به کار (${newPermit.status}) صادر شد.`, 'success');
+        });
+
+        function renderPermits() {
+            const filter = document.getElementById('permit-filter-status').value;
+            const container = document.getElementById('permits-list-container');
+            const filtered = filter === 'ALL' ? state.permits : state.permits.filter(p => p.status === filter);
+            const canEditStatus = ['admin', 'specialist'].includes(state.currentUser?.role);
+
+            if (filtered.length === 0) {
+                container.innerHTML = '<div class="text-center py-8 text-slate-400 text-xs">هیچ مجوزی با این فیلتر یافت نشد.</div>';
+                return;
+            }
+
+            container.innerHTML = filtered.map(p => {
+                const statusStyles = {
+                    'تایید شده': 'border-emerald-200 bg-emerald-50/40 text-emerald-800 badge-bg:bg-emerald-100',
+                    'تایید مشروط': 'border-amber-200 bg-amber-50/40 text-amber-800',
+                    'عدم تایید': 'border-red-200 bg-red-50/40 text-red-800'
+                };
+                const badgeColor = p.status === 'تایید شده' ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
+                    : (p.status === 'تایید مشروط' ? 'bg-amber-100 text-amber-800 border-amber-300' : 'bg-red-100 text-red-800 border-red-300');
+
+                const checkTag = (ok, label) => `<span class="px-2 py-0.5 rounded text-[10px] font-bold ${ok ? 'bg-emerald-100/80 text-emerald-800' : 'bg-red-100 text-red-700'}">${ok ? '✓' : '✗'} ${label}</span>`;
+
+                return `
+                    <div class="p-4 rounded-2xl border ${statusStyles[p.status] || 'border-slate-200'} transition">
+                        <div class="flex flex-wrap items-start justify-between gap-2 mb-2">
+                            <div>
+                                <div class="flex items-center gap-2">
+                                    <span class="font-mono text-xs font-bold text-slate-500">#${p.id}</span>
+                                    <span class="text-xs font-extrabold text-slate-900">${p.line}</span>
+                                </div>
+                                <div class="text-xs font-bold text-blue-800 mt-0.5">[${p.productCode}] ${p.productName}</div>
+                            </div>
+                            <span class="px-2.5 py-1 rounded-xl text-xs font-extrabold border ${badgeColor}">${p.status}</span>
+                        </div>
+                        <div class="flex flex-wrap gap-1.5 my-2.5">
+                            ${checkTag(p.checks.clean, 'پاکسازی خط')}
+                            ${checkTag(p.checks.mold, 'سلامت قالب/گیج')}
+                            ${checkTag(p.checks.params, 'پارامتر فرآیند')}
+                            ${checkTag(p.checks.firstPiece, 'قطعه شاهد')}
+                        </div>
+                        <p class="text-xs text-slate-600 mb-2"><strong>توضیحات:</strong> ${p.note}</p>
+                        <div class="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-200/60 text-[11px] text-slate-500">
+                            <span>صادرکننده: <strong>${p.issuer}</strong> | زمان: ${p.time}</span>
+                            ${canEditStatus ? `
+                                <div class="flex items-center gap-1">
+                                    <button onclick="changePermitStatus('${p.id}', 'تایید شده')" class="px-2 py-1 bg-emerald-600 text-white rounded-lg font-bold hover:bg-emerald-700">تایید</button>
+                                    <button onclick="changePermitStatus('${p.id}', 'تایید مشروط')" class="px-2 py-1 bg-amber-500 text-white rounded-lg font-bold hover:bg-amber-600">مشروط</button>
+                                    <button onclick="changePermitStatus('${p.id}', 'عدم تایید')" class="px-2 py-1 bg-red-600 text-white rounded-lg font-bold hover:bg-red-700">توقف</button>
+                                </div>
+                            ` : ''}
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function changePermitStatus(id, newStatus) {
+            const permit = state.permits.find(p => p.id === id);
+            if (permit) {
+                permit.status = newStatus;
+                saveAllState();
+                renderPermits();
+                showToast(`وضعیت مجوز ${id} به «${newStatus}» تغییر یافت.`, 'info');
+            }
+        }
+
+        // ==================== منطق تب ۳: داشبورد و نمودار پارتو ====================
+        function updateDashboard() {
+            const productFilter = document.getElementById('dashboard-product-filter').value;
+            const records = productFilter === 'ALL'
+                ? state.inspections
+                : state.inspections.filter(r => r.productCode === productFilter);
+
+            let totalInspected = 0;
+            let totalDefects = 0;
+            const defectFreq = {};
+
+            records.forEach(r => {
+                totalInspected += r.batchSize;
+                r.defects.forEach(d => {
+                    totalDefects += d.count;
+                    defectFreq[d.type] = (defectFreq[d.type] || 0) + d.count;
+                });
+            });
+
+            const rate = totalInspected > 0 ? ((totalDefects / totalInspected) * 100).toFixed(2) : '0.00';
+            const approvedPermits = state.permits.filter(p => p.status === 'تایید شده' || p.status === 'تایید مشروط').length;
+            const stoppedPermits = state.permits.filter(p => p.status === 'عدم تایید').length;
+
+            document.getElementById('kpi-total-inspected').textContent = totalInspected.toLocaleString('fa-IR');
+            document.getElementById('kpi-total-defects').textContent = totalDefects.toLocaleString('fa-IR');
+            document.getElementById('kpi-defect-rate').textContent = `${rate}٪`;
+            document.getElementById('kpi-permits-summary').textContent = `${approvedPermits} فعال / ${stoppedPermits} متوقف`;
+
+            // محاسبه پارتو (مرتب‌سازی نزولی + درصد تجمعی)
+            const sortedDefects = Object.entries(defectFreq)
+                .map(([name, count]) => ({ name, count }))
+                .sort((a, b) => b.count - a.count);
+
+            let cumulative = 0;
+            const paretoData = sortedDefects.map(item => {
+                cumulative += item.count;
+                const cumPercent = totalDefects > 0 ? Number(((cumulative / totalDefects) * 100).toFixed(1)) : 0;
+                return { ...item, cumPercent };
+            });
+
+            // رندر جدول پارتو
+            const tbody = document.getElementById('pareto-table-tbody');
+            if (paretoData.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="3" class="py-6 text-center text-slate-400">داده‌ای برای نمایش وجود ندارد</td></tr>';
+            } else {
+                tbody.innerHTML = paretoData.map(item => {
+                    const isVital = item.cumPercent <= 82;
+                    return `
+                        <tr class="${isVital ? 'bg-amber-50/50' : ''}">
+                            <td class="py-2 px-2.5 font-bold text-slate-800">${item.name}</td>
+                            <td class="py-2 px-2.5 font-extrabold text-red-600">${item.count}</td>
+                            <td class="py-2 px-2.5 font-bold ${isVital ? 'text-amber-700' : 'text-slate-500'}">${item.cumPercent}٪</td>
+                        </tr>
+                    `;
+                }).join('');
+            }
+
+            // رسم نمودار Chart.js
+            const ctx = document.getElementById('paretoChart').getContext('2d');
+            if (paretoChartInstance) {
+                paretoChartInstance.destroy();
+            }
+
+            paretoChartInstance = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: paretoData.map(d => d.name.length > 22 ? d.name.slice(0, 22) + '...' : d.name),
+                    datasets: [
+                        {
+                            type: 'line',
+                            label: 'درصد تجمعی (٪)',
+                            data: paretoData.map(d => d.cumPercent),
+                            borderColor: '#dc2626',
+                            backgroundColor: '#dc2626',
+                            borderWidth: 2.5,
+                            pointRadius: 4,
+                            tension: 0.2,
+                            yAxisID: 'y1'
+                        },
+                        {
+                            type: 'bar',
+                            label: 'فراوانی عیب (تعداد)',
+                            data: paretoData.map(d => d.count),
+                            backgroundColor: '#1d4ed8',
+                            borderRadius: 6,
+                            yAxisID: 'y'
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            labels: { font: { family: 'Vazirmatn', size: 12, weight: 'bold' } }
+                        },
+                        tooltip: {
+                            titleFont: { family: 'Vazirmatn' },
+                            bodyFont: { family: 'Vazirmatn' }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            ticks: { font: { family: 'Vazirmatn', size: 11 } }
+                        },
+                        y: {
+                            type: 'linear',
+                            position: 'right',
+                            beginAtZero: true,
+                            title: { display: true, text: 'تعداد عیوب', font: { family: 'Vazirmatn', weight: 'bold' } }
+                        },
+                        y1: {
+                            type: 'linear',
+                            position: 'left',
+                            min: 0,
+                            max: 100,
+                            grid: { drawOnChartArea: false },
+                            title: { display: true, text: 'درصد تجمعی (٪)', font: { family: 'Vazirmatn', weight: 'bold' } }
+                        }
+                    }
+                }
+            });
+        }
+
+        // ==================== منطق تب ۴: سوابق جامع و خروجی اکسل ====================
+        function renderRecordsTable() {
+            const query = document.getElementById('records-search').value.trim().toLowerCase();
+            const tbody = document.getElementById('all-records-tbody');
+            const role = state.currentUser?.role;
+
+            const filtered = state.inspections.filter(r =>
+                r.productCode.toLowerCase().includes(query) ||
+                r.productName.toLowerCase().includes(query) ||
+                r.inspector.toLowerCase().includes(query) ||
+                r.line.toLowerCase().includes(query) ||
+                r.id.toLowerCase().includes(query)
+            );
+
+            tbody.innerHTML = filtered.map(r => {
+                const totalDef = r.defects.reduce((s, d) => s + d.count, 0);
+                const defectsSummary = r.defects.length
+                    ? r.defects.map(d => `${d.type}: ${d.count}`).join(' | ')
+                    : 'سالم';
+
+                const verifyBadge = r.verified
+                    ? '<span class="px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 font-bold">تایید کارشناس</span>'
+                    : '<span class="px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 font-bold">در انتظار بررسی</span>';
+
+                let actionsHtml = '<span class="text-slate-400 text-[11px]">فقط مشاهده</span>';
+                if (role === 'specialist' || role === 'admin') {
+                    actionsHtml = `
+                        <div class="flex items-center justify-center gap-1.5">
+                            <button onclick="toggleVerifyRecord('${r.id}')" title="تغییر وضعیت تایید کارشناس"
+                                class="p-1.5 rounded-lg ${r.verified ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'} hover:opacity-80">
+                                <i data-lucide="check-square" class="w-3.5 h-3.5"></i>
+                            </button>
+                            ${role === 'admin' ? `
+                                <button onclick="deleteInspectionRecord('${r.id}')" title="حذف رکورد (فقط ادمین)"
+                                    class="p-1.5 rounded-lg bg-red-100 text-red-700 hover:bg-red-200">
+                                    <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+                                </button>
+                            ` : ''}
+                        </div>
+                    `;
+                }
+
+                return `
+                    <tr class="hover:bg-slate-50">
+                        <td class="py-2.5 px-3 font-mono font-bold text-slate-600">${r.id}</td>
+                        <td class="py-2.5 px-3"><div>${r.date}</div><div class="text-[10px] text-slate-400">${r.shift}</div></td>
+                        <td class="py-2.5 px-3"><span class="font-mono font-bold text-blue-700">${r.productCode}</span><div class="font-bold text-slate-800">${r.productName}</div></td>
+                        <td class="py-2.5 px-3 text-slate-600">${r.line}</td>
+                        <td class="py-2.5 px-3 text-slate-700 font-medium">${r.inspector}</td>
+                        <td class="py-2.5 px-3 font-bold">${r.batchSize} / <span class="${totalDef > 0 ? 'text-red-600' : 'text-emerald-600'}">${totalDef}</span></td>
+                        <td class="py-2.5 px-3 text-slate-600 max-w-xs">${defectsSummary}</td>
+                        <td class="py-2.5 px-3">${verifyBadge}</td>
+                        <td class="py-2.5 px-3 text-center">${actionsHtml}</td>
+                    </tr>
+                `;
+            }).join('');
+            lucide.createIcons();
+        }
+
+        function toggleVerifyRecord(id) {
+            const rec = state.inspections.find(r => r.id === id);
+            if (rec) {
+                rec.verified = !rec.verified;
+                saveAllState();
+                renderRecordsTable();
+                showToast('وضعیت تایید کارشناسی به‌روزرسانی شد.', 'info');
+            }
+        }
+
+        function deleteInspectionRecord(id) {
+            customConfirm('حذف رکورد بازرسی', 'آیا از حذف دائمی این گزارش بازرسی اطمینان دارید؟', () => {
+                state.inspections = state.inspections.filter(r => r.id !== id);
+                saveAllState();
+                renderRecordsTable();
+                showToast('رکورد مورد نظر حذف شد.', 'warning');
+            });
+        }
+
+        function exportToExcel() {
+            if (typeof XLSX === 'undefined') {
+                showToast('کتابخانه اکسل بارگذاری نشده است. اتصال اینترنت را بررسی کنید.', 'error');
+                return;
+            }
+            const rows = state.inspections.map(r => {
+                const totalDef = r.defects.reduce((s, d) => s + d.count, 0);
+                return {
+                    'شناسه گزارش': r.id,
+                    'تاریخ': r.date,
+                    'شیفت کاری': r.shift,
+                    'خط تولید': r.line,
+                    'کد قطعه': r.productCode,
+                    'نام محصول': r.productName,
+                    'سریال بچ': r.serial,
+                    'نام بازرس': r.inspector,
+                    'تعداد کل بچ': r.batchSize,
+                    'تعداد معیوب': totalDef,
+                    'درصد ضایعات': ((totalDef / r.batchSize) * 100).toFixed(2) + '%',
+                    'شرح عیوب': r.defects.map(d => `${d.type} (${d.count})`).join(' - ') || 'سالم',
+                    'توضیحات': r.notes,
+                    'تایید کارشناس': r.verified ? 'تایید شده' : 'در انتظار بررسی'
+                };
+            });
+
+            const worksheet = XLSX.utils.json_to_sheet(rows);
+            const workbook = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(workbook, worksheet, 'گزارش کنترل کیفیت');
+            XLSX.writeFile(workbook, `ArmanMotor_QC_Report_${Date.now()}.xlsx`);
+            showToast('فایل اکسل گزارش کنترل کیفیت با موفقیت دانلود شد.', 'success');
+        }
+
+        // ==================== منطق تب ۵: پنل ادمین و مدیریت کاربران ====================
+        function renderAdminPanel() {
+            // ۱. رندر جدول کاربران
+            const usersTbody = document.getElementById('admin-users-tbody');
+            document.getElementById('users-count-badge').textContent = `${state.users.length} کاربر ثبت‌شده`;
+
+            usersTbody.innerHTML = state.users.map(u => {
+                const roleInfo = ROLE_LABELS[u.role];
+                const isSelf = u.id === state.currentUser.id;
+                return `
+                    <tr class="hover:bg-slate-50 ${!u.active ? 'opacity-60 bg-slate-50' : ''}">
+                        <td class="py-2.5 px-3 font-bold text-slate-900">${u.fullName} ${isSelf ? '<span class="text-[10px] text-purple-600">(شما)</span>' : ''}</td>
+                        <td class="py-2.5 px-3 font-mono text-slate-700">${u.username}</td>
+                        <td class="py-2.5 px-3 font-mono text-slate-500">${u.password}</td>
+                        <td class="py-2.5 px-3"><span class="px-2 py-0.5 rounded-md border text-[11px] font-bold ${roleInfo.badge}">${roleInfo.title}</span></td>
+                        <td class="py-2.5 px-3">
+                            <button onclick="toggleUserActive('${u.id}')" ${isSelf ? 'disabled' : ''}
+                                class="px-2 py-0.5 rounded-md text-[11px] font-bold ${u.active ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-800'} ${isSelf ? 'cursor-not-allowed' : 'cursor-pointer hover:opacity-80'}">
+                                ${u.active ? 'فعال' : 'غیرفعال'}
+                            </button>
+                        </td>
+                        <td class="py-2.5 px-3 text-center">
+                            <div class="flex items-center justify-center gap-1.5">
+                                <button onclick="editUser('${u.id}')" title="ویرایش کاربر و رمز عبور"
+                                    class="p-1.5 bg-blue-50 text-blue-700 hover:bg-blue-100 rounded-lg">
+                                    <i data-lucide="edit-3" class="w-3.5 h-3.5"></i>
+                                </button>
+                                ${!isSelf ? `
+                                    <button onclick="deleteUser('${u.id}')" title="حذف کاربر"
+                                        class="p-1.5 bg-red-50 text-red-700 hover:bg-red-100 rounded-lg">
+                                        <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+                                    </button>
+                                ` : ''}
+                            </div>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+
+            // ۲. رندر کاتالوگ محصولات
+            const prodList = document.getElementById('admin-products-list');
+            prodList.innerHTML = state.products.map((p, idx) => `
+                <div class="flex items-center justify-between px-3 py-2 text-xs hover:bg-slate-50">
+                    <div>
+                        <span class="font-mono font-bold text-blue-700 ml-2">${p.code}</span>
+                        <span class="font-medium text-slate-800">${p.name}</span>
+                    </div>
+                    <button onclick="deleteProduct(${idx})" class="text-red-500 hover:text-red-700 p-1" title="حذف قطعه">
+                        <i data-lucide="x" class="w-4 h-4"></i>
+                    </button>
+                </div>
+            `).join('');
+
+            // ۳. رندر لیست عیوب استاندارد
+            const defList = document.getElementById('admin-defects-list');
+            defList.innerHTML = state.defectTypes.map((d, idx) => `
+                <div class="flex items-center justify-between px-3 py-2 text-xs hover:bg-slate-50">
+                    <span class="font-medium text-slate-800">${d}</span>
+                    <button onclick="deleteDefectType(${idx})" class="text-red-500 hover:text-red-700 p-1" title="حذف عیب">
+                        <i data-lucide="x" class="w-4 h-4"></i>
+                    </button>
+                </div>
+            `).join('');
+
+            lucide.createIcons();
+        }
+
+        document.getElementById('admin-user-form').addEventListener('submit', function(e) {
+            e.preventDefault();
+            const editId = document.getElementById('edit-user-id').value;
+            const fullName = document.getElementById('admin-user-fullname').value.trim();
+            const username = document.getElementById('admin-user-username').value.trim();
+            const password = document.getElementById('admin-user-password').value.trim();
+            const role = document.getElementById('admin-user-role').value;
+
+            if (editId) {
+                const user = state.users.find(u => u.id === editId);
+                if (user) {
+                    user.fullName = fullName;
+                    user.username = username;
+                    user.password = password;
+                    user.role = role;
+                    showToast('اطلاعات کاربر با موفقیت ویرایش شد.', 'success');
+                }
+            } else {
+                if (state.users.some(u => u.username.toLowerCase() === username.toLowerCase())) {
+                    showToast('این نام کاربری قبلاً ثبت شده است.', 'error');
+                    return;
+                }
+                state.users.push({
+                    id: 'u-' + Date.now(),
+                    fullName,
+                    username,
+                    password,
+                    role,
+                    active: true
+                });
+                showToast('کاربر جدید با موفقیت به سامانه اضافه شد.', 'success');
+            }
+
+            saveAllState();
+            resetUserForm();
+            renderAdminPanel();
+        });
+
+        function editUser(id) {
+            const u = state.users.find(user => user.id === id);
+            if (!u) return;
+            document.getElementById('edit-user-id').value = u.id;
+            document.getElementById('admin-user-fullname').value = u.fullName;
+            document.getElementById('admin-user-username').value = u.username;
+            document.getElementById('admin-user-password').value = u.password;
+            document.getElementById('admin-user-role').value = u.role;
+
+            document.getElementById('user-form-title').innerHTML = `<i data-lucide="edit" class="w-4 h-4 text-blue-600"></i><span>ویرایش کاربر: ${u.fullName}</span>`;
+            document.getElementById('save-user-btn').textContent = 'به‌روزرسانی اطلاعات کاربر';
+            document.getElementById('cancel-edit-user-btn').classList.remove('hidden');
+            lucide.createIcons();
+        }
+
+        function resetUserForm() {
+            document.getElementById('admin-user-form').reset();
+            document.getElementById('edit-user-id').value = '';
+            document.getElementById('user-form-title').innerHTML = `<i data-lucide="user-plus" class="w-4 h-4 text-purple-600"></i><span>تعریف کاربر جدید (بازرس / کارشناس / ادمین)</span>`;
+            document.getElementById('save-user-btn').textContent = 'ذخیره کاربر';
+            document.getElementById('cancel-edit-user-btn').classList.add('hidden');
+            lucide.createIcons();
+        }
+
+        function toggleUserActive(id) {
+            const u = state.users.find(user => user.id === id);
+            if (u && u.id !== state.currentUser.id) {
+                u.active = !u.active;
+                saveAllState();
+                renderAdminPanel();
+                showToast(`وضعیت حساب ${u.fullName} تغییر کرد.`, 'info');
+            }
+        }
+
+        function deleteUser(id) {
+            customConfirm('حذف حساب کاربری', 'آیا از حذف این کاربر از سامانه اطمینان دارید؟', () => {
+                state.users = state.users.filter(u => u.id !== id);
+                saveAllState();
+                renderAdminPanel();
+                showToast('حساب کاربری حذف شد.', 'warning');
+            });
+        }
+
+        document.getElementById('admin-product-form').addEventListener('submit', function(e) {
+            e.preventDefault();
+            const code = document.getElementById('new-prod-code').value.trim().toUpperCase();
+            const name = document.getElementById('new-prod-name').value.trim();
+            if (state.products.some(p => p.code === code)) {
+                showToast('این کد قطعه تکراری است.', 'error');
+                return;
+            }
+            state.products.push({ code, name });
+            saveAllState();
+            populateDropdowns();
+            renderAdminPanel();
+            this.reset();
+            showToast('محصول جدید به کاتالوگ اضافه شد.', 'success');
+        });
+
+        function deleteProduct(idx) {
+            state.products.splice(idx, 1);
+            saveAllState();
+            populateDropdowns();
+            renderAdminPanel();
+            showToast('محصول از کاتالوگ حذف شد.', 'info');
+        }
+
+        document.getElementById('admin-defect-form').addEventListener('submit', function(e) {
+            e.preventDefault();
+            const name = document.getElementById('new-defect-name').value.trim();
+            if (state.defectTypes.includes(name)) {
+                showToast('این عنوان عیب قبلاً ثبت شده است.', 'error');
+                return;
+            }
+            state.defectTypes.push(name);
+            saveAllState();
+            renderAdminPanel();
+            this.reset();
+            showToast('عنوان عیب جدید اضافه شد.', 'success');
+        });
+
+        function deleteDefectType(idx) {
+            state.defectTypes.splice(idx, 1);
+            saveAllState();
+            renderAdminPanel();
+            showToast('عنوان عیب حذف شد.', 'info');
+        }
+
+        function confirmResetDemoData() {
+            customConfirm(
+                'بازنشانی داده‌های سامانه',
+                'تمام کاربران، محصولات، بازرسی‌ها و مجوزهای فعلی پاک شده و داده‌های پیش‌فرض کارخانه آرمان موتور بازیابی می‌شوند. ادامه می‌دهید؟',
+                () => {
+                    Object.values(STORAGE_KEYS).forEach(k => localStorage.removeItem(k));
+                    loadState();
+                    const adminUser = state.users.find(u => u.role === 'admin');
+                    loginSuccess(adminUser);
+                    showToast('داده‌های دمو به حالت اولیه بازنشانی شدند.', 'success');
+                }
+            );
+        }
+
+        // ==================== راه‌اندازی اولیه ====================
+        window.addEventListener('DOMContentLoaded', () => {
+            loadState();
+            lucide.createIcons();
+            if (state.currentUser) {
+                loginSuccess(state.currentUser);
+            }
+        });
+    </script>
+</body>
+</html>
